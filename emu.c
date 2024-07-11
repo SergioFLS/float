@@ -23,6 +23,9 @@
 #include <string.h>
 #include <stdint.h>
 
+#define MASK_8 0xFF
+#define MASK_16 0xFFFF
+
 #define signature "float"
 #define dietext (signature " fatal error: ")
 
@@ -41,26 +44,26 @@ static void die(const char *msg)
     exit(-1);
 }
 
-static uint8_t read_byte(FILE* fp)
+static uint_least8_t read_byte(FILE* fp)
 {
-    uint8_t c;
+    uint_least8_t c;
     if (fread(&c, sizeof c, 1, fp) != 1)
         die("couldn't read next byte from file");
-    return c;
+    return c & MASK_8;
 }
 
-static uint16_t get_number(FILE* fp, int word)
+static uint_fast16_t get_number(FILE* fp, int word)
 {
-    uint8_t c = read_byte(fp);
+    uint_fast8_t c = (uint_fast8_t)read_byte(fp);
     if (!word) return c;
-    return c << 8 | read_byte(fp);
+    return (c << 8 | read_byte(fp)) & MASK_16;
 }
 
 static void interpret(FILE* fp)
 {
-    union { struct { uint16_t A, B, C, D; }; uint16_t arr[4]; } regs;
+    union { struct { uint_fast16_t A, B, C, D; }; uint_fast16_t arr[4]; } regs;
 
-    uint8_t mem[0xffff+1];
+    uint_least8_t mem[0xffff+1];
     memset(mem, 0, sizeof mem);
 
     for (;;)
@@ -72,13 +75,13 @@ static void interpret(FILE* fp)
 #define qual_num(n) (reg ? regs.arr[n&3] : imm ? n : mem[n])
 #define reg ptr
 
-        uint8_t raw = read_byte(fp);
+        uint_fast8_t raw = read_byte(fp);
 
-        uint8_t imm = raw & IMM_MASK,
+        uint_fast8_t imm = raw & IMM_MASK,
              ptr = raw & PTR_MASK,
              wrd = raw & WRD_MASK;
 
-        uint8_t ins = (raw & ~(IMM_MASK | PTR_MASK | WRD_MASK)) >> 3;
+        uint_fast8_t ins = (raw & ~(IMM_MASK | PTR_MASK | WRD_MASK)) >> 3;
 
         switch (ins)
         {
@@ -87,63 +90,63 @@ static void interpret(FILE* fp)
 
             // FIXME: lotta repeated code :(
             case 0x01: { // MOV
-                uint16_t num = get_num();
-                uint16_t addr = mem[get_num()];
+                uint_fast16_t num = get_num();
+                uint_fast16_t addr = mem[get_num()];
                 mem[addr] = qual_num(num);
             } break;
 
             case 0x02: { // MRG
-                uint16_t a = get_num();
-                uint16_t *b = &regs.arr[get_num()&3];
+                uint_fast16_t a = get_num();
+                uint_fast16_t *b = &regs.arr[get_num()&3];
                 *b = qual_num(a);
             } break;
 
             case 0x03: { // ADD
-                uint16_t a = get_num();
-                uint16_t *b = &regs.arr[get_num()&3];
+                uint_fast16_t a = get_num();
+                uint_fast16_t *b = &regs.arr[get_num()&3];
                 *b += qual_num(a);
             }
 
             case 0x04: { // SUB
-                uint16_t a = get_num();
-                uint16_t *b = &regs.arr[get_num()&3];
+                uint_fast16_t a = get_num();
+                uint_fast16_t *b = &regs.arr[get_num()&3];
                 *b -= qual_num(a);
             }
 
             case 0x05: { // MUL
-                uint16_t a = get_num();
-                uint16_t *b = &regs.arr[get_num()&3];
+                uint_fast16_t a = get_num();
+                uint_fast16_t *b = &regs.arr[get_num()&3];
                 *b *= qual_num(a);
             }
 
             case 0x06: { // DIV
-                uint16_t a = get_num();
-                uint16_t *b = &regs.arr[get_num()&3];
+                uint_fast16_t a = get_num();
+                uint_fast16_t *b = &regs.arr[get_num()&3];
                 // TODO: throw div zero exception
                 // throw any exception, actually
                 *b /= qual_num(a);
             }
             
             case 0x07: { // AND
-                uint16_t a = get_num();
-                uint16_t *b = &regs.arr[get_num()&3];
+                uint_fast16_t a = get_num();
+                uint_fast16_t *b = &regs.arr[get_num()&3];
                 *b &= qual_num(a);
             }
 
             case 0x08: { // OR
-                uint16_t a = get_num();
-                uint16_t *b = &regs.arr[get_num()&3];
+                uint_fast16_t a = get_num();
+                uint_fast16_t *b = &regs.arr[get_num()&3];
                 *b |= qual_num(a);
             }
 
             case 0x09: { // XOR
-                uint16_t a = get_num();
-                uint16_t *b = &regs.arr[get_num()&3];
+                uint_fast16_t a = get_num();
+                uint_fast16_t *b = &regs.arr[get_num()&3];
                 *b ^= qual_num(a);
             }
 
             case 0x0a: { // NOT
-                uint16_t *b = &regs.arr[get_num()&3];
+                uint_fast16_t *b = &regs.arr[get_num()&3];
                 *b = ~*b;
             }
 
@@ -167,7 +170,7 @@ static void makeTestFile()
     FILE* fp = fopen("test.rom", "w+b");
     if (!fp) die("couldn't emit test file");
 
-    uint8_t code[] = {
+    uint_least8_t code[] = {
         0x09, 0x01, 0x00, // MOV $0x01  0x00
         0x0b, 0x01, 0x00, // MOV $0x01, [0x00]
         0x00,             // BRK
